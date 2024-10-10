@@ -54,15 +54,15 @@ VOID DestoryMappingInfo(PKDPC Dpc,PVOID DeferredContext,PVOID SystemArgument1,PV
 HOOK_ACTION IPv4RedirectDNSQuery(ULONGLONG InterfaceLuid, FILTER_POINT FilterPoint, BYTE* Buffer, ULONG BufferLength, ULONG* pDataLength) {
 
 	PETH_HEADER EthHeader = (PETH_HEADER)(Buffer);
-	if (ETH_HEADER_PROTOCOL(EthHeader) != ETH_PROTOCOL_IP) {
+	if (GetEtherHeaderProtocol(EthHeader) != ETH_PROTOCOL_IP) {
 		return HOOK_ACTION_ACCEPT;
 	}
 	PIPV4_HEADER IPv4Header = (PIPV4_HEADER)GetNetworkLayerHeaderFromEtherHeader(EthHeader);
-	if (IPv4Header->Version != 4 || IPV4_HEADER_PROTOCOL(IPv4Header) != 17) { // UDP protocol : 17
+	if (IPv4Header->Version != 4 || GetIPv4HeaderProtocol(IPv4Header) != 17) { // UDP protocol : 17
 		return HOOK_ACTION_ACCEPT;
 	}
 	PUDP_HEADER UDPHeader = (PUDP_HEADER)GetTransportLayerHeaderFromIPv4Header(IPv4Header);
-	if (UDP_HEADER_DEST_PORT(UDPHeader) != 53) {
+	if (GetUDPHeaderDestPort(UDPHeader) != 53) {
 		return HOOK_ACTION_ACCEPT;
 	}
 	// To udp port 53. Dns packet, redirect it!
@@ -70,10 +70,10 @@ HOOK_ACTION IPv4RedirectDNSQuery(ULONGLONG InterfaceLuid, FILTER_POINT FilterPoi
 	if (Info == NULL) {
 		return HOOK_ACTION_DROP;
 	}
-	Info->SrcIP = IPV4_HEADER_SRC_ADDR(IPv4Header);
-	Info->SrcPort = UDP_HEADER_SRC_PORT(UDPHeader);
-	Info->DestIP = IPV4_HEADER_DEST_ADDR(IPv4Header);
-	Info->DestPort = UDP_HEADER_DEST_PORT(UDPHeader);
+	Info->SrcIP = GetIPv4HeaderSrcAddr(IPv4Header).AddressUInt32;
+	Info->SrcPort = GetUDPHeaderSrcPort(UDPHeader);
+	Info->DestIP = GetIPv4HeaderDestAddr(IPv4Header).AddressUInt32;
+	Info->DestPort = GetUDPHeaderDestPort(UDPHeader);
 	KIRQL OldIrql;
 	KeAcquireSpinLock(&DNSMappingInfoLock, &OldIrql);
 	InsertHeadList(&DNSMappingInfoHead,&Info->Link);
@@ -86,22 +86,22 @@ HOOK_ACTION IPv4RedirectDNSQuery(ULONGLONG InterfaceLuid, FILTER_POINT FilterPoi
 	KeReleaseSpinLock(&DNSMappingInfoLock, OldIrql);
 
 	// Set dst address to 8.8.8.8
-	SET_IPV4_HEADER_DEST_ADDR(IPv4Header, REDIRECT_DNS_ADDRESS);
+	SetIPv4HeaderDestAddrByUInt32(IPv4Header, REDIRECT_DNS_ADDRESS);
 	return HOOK_ACTION_MODIFIED;
 }
 
 HOOK_ACTION IPv4RedirectDNSResponse(ULONGLONG InterfaceLuid, FILTER_POINT FilterPoint, BYTE* Buffer, ULONG BufferLength, ULONG* pDataLength) {
 
 	PETH_HEADER EthHeader = (PETH_HEADER)(Buffer);
-	if (ETH_HEADER_PROTOCOL(EthHeader) != ETH_PROTOCOL_IP) {
+	if (GetEtherHeaderProtocol(EthHeader) != ETH_PROTOCOL_IP) {
 		return HOOK_ACTION_ACCEPT;
 	}
 	PIPV4_HEADER IPv4Header = (PIPV4_HEADER)GetNetworkLayerHeaderFromEtherHeader(EthHeader);
-	if (IPv4Header->Version != 4 || IPV4_HEADER_PROTOCOL(IPv4Header) != 17) { // UDP protocol : 17
+	if (IPv4Header->Version != 4 || GetIPv4HeaderProtocol(IPv4Header) != 17) { // UDP protocol : 17
 		return HOOK_ACTION_ACCEPT;
 	}
 	PUDP_HEADER UDPHeader = (PUDP_HEADER)GetTransportLayerHeaderFromIPv4Header(IPv4Header);
-	if (UDP_HEADER_SRC_PORT(UDPHeader) != 53 || IPV4_HEADER_SRC_ADDR(IPv4Header) != REDIRECT_DNS_ADDRESS) {
+	if (GetUDPHeaderSrcPort(UDPHeader) != 53 || GetIPv4HeaderSrcAddr(IPv4Header).AddressUInt32 != REDIRECT_DNS_ADDRESS) {
 		return HOOK_ACTION_ACCEPT;
 	}
 
@@ -109,12 +109,11 @@ HOOK_ACTION IPv4RedirectDNSResponse(ULONGLONG InterfaceLuid, FILTER_POINT Filter
 	KIRQL OldIrql;
 	KeAcquireSpinLock(&DNSMappingInfoLock, &OldIrql);
 	for (PLIST_ENTRY i =DNSMappingInfoHead.Blink; i != &DNSMappingInfoHead; i=i->Blink) {
-		USHORT DstPort = UDP_HEADER_DEST_PORT(UDPHeader);
-		ULONG DstIP = IPV4_HEADER_DEST_ADDR(IPv4Header);
+		USHORT DstPort = GetUDPHeaderDestPort(UDPHeader);
+		ULONG DstIP = GetIPv4HeaderDestAddr(IPv4Header).AddressUInt32;
 		PDNS_MAPPING_INFO MappingInfo = CONTAINING_RECORD(i, DNS_MAPPING_INFO, Link);
 		if (DstIP == MappingInfo->SrcIP && DstPort == MappingInfo->SrcPort) {
-			SET_IPV4_HEADER_SRC_ADDR(IPv4Header, MappingInfo->DestIP);
-
+			SetIPv4HeaderSrcAddrByUInt32(IPv4Header, MappingInfo->DestIP);
 			KeReleaseSpinLock(&DNSMappingInfoLock, OldIrql);
 			return HOOK_ACTION_MODIFIED;
 		}
@@ -148,7 +147,7 @@ VOID UnregisterAllHooks ()  {
 			RegisterIPv4RedirectDNSResponse.HookFunction = (PVOID)IPv4RedirectDNSResponse;
 			RegisterIPv4RedirectDNSResponse.Priority = 1025;
 			RegisterIPv4RedirectDNSResponse.FilterPoint = FILTER_POINT_PREROUTING;
-			RegisterIPv4DNSRedirectionIRP = IoBuildDeviceIoControlRequest((ULONG)WINPFILTER_CTL_CODE_UNREGISTER_HOOK, WinpfilterR0HookCommunicationDeviceObject, &RegisterIPv4RedirectDNSResponse, sizeof(WINPFILTER_HOOK_OP_STRUCTURE), &RegisterIPv4RedirectDNSQuery, sizeof(WINPFILTER_HOOK_OP_STRUCTURE), FALSE, NULL, &StatusBlock);
+			RegisterIPv4DNSRedirectionIRP = IoBuildDeviceIoControlRequest((ULONG)WINPFILTER_CTL_CODE_UNREGISTER_HOOK, WinpfilterR0HookCommunicationDeviceObject, &RegisterIPv4RedirectDNSResponse, sizeof(WINPFILTER_HOOK_OP_STRUCTURE), &RegisterIPv4RedirectDNSResponse, sizeof(WINPFILTER_HOOK_OP_STRUCTURE), FALSE, NULL, &StatusBlock);
 			IoCallDriver(WinpfilterR0HookCommunicationDeviceObject, RegisterIPv4DNSRedirectionIRP);
 
 		}

@@ -25,15 +25,46 @@ typedef struct _UDP_HEADER {
 	USHORT  DestPort;
 	USHORT	Length;
 	USHORT	Checksum;
-}UDP_HEADER,*PUDP_HEADER;
+}UDP_HEADER, * PUDP_HEADER;
 #pragma pack ()
 
-#define UDP_HEADER_SRC_PORT(header)						(CONVERT_NETE_16((header)->SrcPort))
-#define UDP_HEADER_DEST_PORT(header)					(CONVERT_NETE_16((header)->DestPort))
-#define UDP_HEADER_LENGTH(header)						(CONVERT_NETE_16((header)->Length))
-#define UDP_HEADER_CHECKSUM(header)						(CONVERT_NETE_16((header)->Checksum))
+inline USHORT GetUDPHeaderSrcPort(PUDP_HEADER header) {
+	return CONVERT_NETE_16(header->SrcPort);
+}
 
-#define SET_UDP_HEADER_SRC_PORT(header,sport)			((header)->SrcPort = CONVERT_NETE_16(sport))
-#define SET_UDP_HEADER_DEST_PORT(header,dport)			((header)->DestPort = CONVERT_NETE_16(dport))
-#define SET_UDP_HEADER_LENGTH(header,length)			((header)->Length = CONVERT_NETE_16(length))
-#define SET_UDP_HEADER_CHECKSUM(header,checksum)		((header)->Checksum = CONVERT_NETE_16(checksum))
+inline VOID SetUDPHeaderSrcPort(PUDP_HEADER header, USHORT sport) {
+	header->SrcPort = CONVERT_NETE_16(sport);
+}
+
+
+inline USHORT GetUDPHeaderDestPort(PUDP_HEADER header) {
+	return CONVERT_NETE_16(header->DestPort);
+}
+
+inline VOID SetUDPHeaderDestPort(PUDP_HEADER header, USHORT dport) {
+	header->DestPort = CONVERT_NETE_16(dport);
+}
+
+
+inline USHORT GetUDPHeaderLength(PUDP_HEADER header) {
+	return CONVERT_NETE_16(header->Length);
+}
+
+inline VOID SetUDPHeaderLength(PUDP_HEADER header, USHORT length) {
+	header->Length = CONVERT_NETE_16(length);
+}
+
+
+inline USHORT GetUDPHeaderChecksum(PUDP_HEADER header) {
+	return CONVERT_NETE_16(header->Checksum);
+}
+
+inline VOID SetUDPHeaderChecksum(PUDP_HEADER header, USHORT checksum) {
+	header->Checksum = CONVERT_NETE_16(checksum);
+}
+
+
+inline PVOID GetApplicationLayerHeaderFromUDPHeader(PUDP_HEADER header) {
+	return (PVOID)((BYTE*)header + sizeof(UDP_HEADER));
+}
+
